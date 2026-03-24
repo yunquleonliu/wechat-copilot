@@ -30,6 +30,9 @@ struct Config {
     std::string cred_path;    // ~/.claude/channels/wechat/account.json
     std::string sync_path;    // ~/.claude/channels/wechat/sync_buf.txt
 
+    // Local execution environment (for tool calls)
+    std::string work_dir;     // WORK_DIR env — where tools execute
+
     // Access control: empty = allow all
     std::vector<std::string> allowed_from;
 
