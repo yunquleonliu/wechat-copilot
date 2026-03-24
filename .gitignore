@@ -1,4 +1,7 @@
-node_modules/\ndist/\n.env\n*.log
 # C++ build artifacts
 cpp/build/
 cpp/vendor/nlohmann/
+
+# Runtime
+.env
+*.log
