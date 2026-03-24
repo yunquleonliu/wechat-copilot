@@ -31,22 +31,34 @@ function isAllowed(fromUser: string): boolean {
   return WECHAT_ALLOWED_FROM.includes(fromUser);
 }
 
+const MSG_ITEM_VOICE = 3;
+
 function extractText(msg: ILinkMessage): string | null {
-  if (msg.msg_type !== MSG_TYPE_USER) return null;
-  const textItem = msg.content?.find((c) => c.type === MSG_ITEM_TEXT);
-  return textItem?.text?.trim() || null;
+  if (msg.message_type !== MSG_TYPE_USER) return null;
+  const parts: string[] = [];
+  for (const item of msg.item_list ?? []) {
+    if (item.type === MSG_ITEM_TEXT && item.text_item?.text) {
+      parts.push(item.text_item.text);
+    }
+    // Voice: iLink transcribes to text automatically
+    if (item.type === MSG_ITEM_VOICE && item.voice_item?.text) {
+      parts.push(`[voice] ${item.voice_item.text}`);
+    }
+  }
+  return parts.join("\n").trim() || null;
 }
 
 async function handleMessage(creds: ILinkCreds, msg: ILinkMessage): Promise<void> {
-  if (!isAllowed(msg.from_user)) {
-    console.log(`[wechat] blocked: ${msg.from_user}`);
+  const fromUser = msg.from_user_id ?? "";
+  if (!isAllowed(fromUser)) {
+    console.log(`[wechat] blocked: ${fromUser}`);
     return;
   }
 
   const text = extractText(msg);
   if (!text) return;
 
-  console.log(`[wechat] ← ${msg.from_user}: ${text.slice(0, 80)}`);
+  console.log(`[wechat] ← ${fromUser}: ${text.slice(0, 80)}`);
 
   let reply: string;
   try {
@@ -56,7 +68,7 @@ async function handleMessage(creds: ILinkCreds, msg: ILinkMessage): Promise<void
   }
 
   console.log(`[wechat] → reply (${reply.length} chars)`);
-  await sendReply(creds, msg.from_user, reply, msg.context_token);
+  await sendReply(creds, fromUser, reply, msg.context_token);
 }
 
 export async function start(): Promise<void> {

@@ -14,7 +14,6 @@ import { queryOmnicode } from "./agents/omnicode.js";
 import { queryGemma }    from "./agents/gemma.js";
 
 const copilot = new CopilotAgent();
-copilot.start();
 
 export async function route(rawMessage: string): Promise<string> {
   const text = rawMessage.trim();
@@ -24,9 +23,8 @@ export async function route(rawMessage: string): Promise<string> {
   }
 
   if (text === "/reset") {
-    copilot.stop();
-    copilot.start(false); // fresh session, no --continue
-    return "✅ Copilot session reset. Starting fresh.";
+    copilot.reset();
+    return "Copilot session reset. Starting fresh.";
   }
 
   if (text.startsWith("/code ")) {
@@ -44,30 +42,24 @@ export async function route(rawMessage: string): Promise<string> {
   if (text === "/help") {
     return [
       "wechat-copilot commands:",
-      "  (message)     → Copilot CLI (local VSCode agent, shared session)",
-      "  /code <msg>   → OmniCode 9B (fast code completions)",
-      "  /ask  <msg>   → Gemma 9B (general Q&A)",
-      "  /status       → system status",
-      "  /reset        → reset Copilot session",
+      "  (message)     -> Copilot (claude-sonnet-4.6 via GitHub)",
+      "  /code <msg>   -> OmniCode 9B (local :8081)",
+      "  /ask  <msg>   -> Gemma 9B (local :8080)",
+      "  /status       -> system status",
+      "  /reset        -> reset conversation history",
     ].join("\n");
   }
 
-  // Default: full Copilot agent
-  const result = await copilot.query(text);
-  return result.text;
+  // Default: GitHub Copilot (claude-sonnet-4.6)
+  return await copilot.query(text);
 }
 
 function buildStatus(): string {
-  const lines = [
+  return [
     "wechat-copilot status",
-    `  Copilot CLI:  ${process.env.CLAUDE_BIN ?? "default path"}`,
-    `  OmniCode:     ${process.env.OMNICODE_URL ?? "http://localhost:8081/v1"}`,
-    `  Gemma:        ${process.env.GEMMA_URL    ?? "http://localhost:8080/v1"}`,
-    `  WORK_DIR:     ${process.env.WORK_DIR     ?? process.cwd()}`,
-  ];
-  return lines.join("\n");
+    `  Copilot:  claude-sonnet-4.6 via api.githubcopilot.com`,
+    `  OmniCode: ${process.env.OMNICODE_URL ?? "http://localhost:8081/v1"}`,
+    `  Gemma:    ${process.env.GEMMA_URL    ?? "http://localhost:8080/v1"}`,
+    `  WORK_DIR: ${process.env.WORK_DIR     ?? process.cwd()}`,
+  ].join("\n");
 }
-
-// Ensure clean shutdown on exit
-process.on("SIGTERM", () => { copilot.stop(); process.exit(0); });
-process.on("SIGINT",  () => { copilot.stop(); process.exit(0); });

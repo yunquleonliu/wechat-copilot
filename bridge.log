@@ -1,0 +1,9 @@
+
+> wechat-copilot@0.1.0 dev
+> tsx src/index.ts
+
+wechat-copilot starting...
+[wechat] adapter started, polling iLink...
+[wechat] raw msg: {"seq":8,"message_id":7442275054120480000,"from_user_id":"o9cq806VVf2pxzn1pf1iQF7CwKAc@im.wechat","to_user_id":"266a905994f0@im.bot","client_id":"mmassistant_bypmsg_inbox_4e338dfe81d528df421dc509245ce
+[wechat] ← o9cq806VVf2pxzn1pf1iQF7CwKAc@im.wechat: [voice] 现在我们发一个语音消息，看你能不能处理语音效果
+[wechat] → reply (148 chars)

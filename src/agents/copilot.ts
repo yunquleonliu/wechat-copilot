@@ -1,111 +1,91 @@
 /**
- * Copilot agent — spawns local Claude Code CLI (VSCode Copilot Chat extension).
+ * Copilot agent — calls GitHub Copilot API (OpenAI-compat) directly.
  *
- * Uses stream-json protocol over stdin/stdout.
- * The spawned process shares ~/.claude/ with VSCode:
- *   - same session history
- *   - same CLAUDE.md rules
- *   - same MCP tools
- *   - --continue resumes the last VSCode session
+ * Uses the GitHub OAuth token from git credentials (same account as VSCode).
+ * Model: claude-sonnet-4.6 via GitHub Copilot — no separate Anthropic billing.
  *
- * Ownership: caller must call stop() when done to release the child process.
+ * Session memory: per-instance message history for multi-turn conversation.
  */
 
-import { spawn, type ChildProcess } from "node:child_process";
-import readline from "node:readline";
-import { CLAUDE_BIN, WORK_DIR, QUERY_TIMEOUT_MS } from "../config.js";
+import fs from "node:fs";
+import { QUERY_TIMEOUT_MS } from "../config.js";
 
-// System prompt appended to every session — sets RustCC context
-const SYSTEM_PROMPT = [
-  "You are running as a WeChat bridge agent for the RustCC profiler project.",
-  "Working directory: " + WORK_DIR,
-  "Reply in plain text only — no markdown, WeChat does not render it.",
-  "Be concise. This is a chat interface.",
-  "You have full access to the local filesystem, build tools, git, and the RustCC profiler.",
-  "RustCC rules: enforce ownership (TCC-OWN), lifetime (TCC-LIFE), concurrency (TCC-CONC) semantics.",
-].join("\n");
+const COPILOT_API = "https://api.githubcopilot.com";
+const MODEL = process.env.COPILOT_MODEL ?? "claude-sonnet-4.6";
+const MAX_HISTORY = 20;
 
-export interface AgentResponse {
-  text: string;
+const SYSTEM_PROMPT =
+  "You are a coding agent for the RustCC profiler project, accessible via WeChat. " +
+  "You have full access to the local filesystem, build tools, git, and the RustCC profiler. " +
+  "RustCC rules: enforce ownership (TCC-OWN), lifetime (TCC-LIFE), concurrency (TCC-CONC) semantics. " +
+  "Reply in plain text only — no markdown, WeChat does not render it. Be concise.";
+
+interface Message { role: "system" | "user" | "assistant"; content: string; }
+
+function loadToken(): string {
+  if (process.env.GITHUB_TOKEN) return process.env.GITHUB_TOKEN;
+  try {
+    const creds = fs.readFileSync("/home/vtuser/.git-credentials", "utf-8");
+    const match = creds.match(/https:\/\/\d+:(gho_[^@\s]+)@github\.com/);
+    if (match) return match[1];
+  } catch { /* ignore */ }
+  throw new Error("No GitHub token found. Set GITHUB_TOKEN in .env");
 }
 
 export class CopilotAgent {
-  private child: ChildProcess | null = null;
-  private rl: readline.Interface | null = null;
+  private history: Message[] = [];
+  private readonly token: string;
 
-  /** Spawn the Claude Code CLI process. */
-  start(continueSession = true): void {
-    const args = [
-      CLAUDE_BIN,
-      "--output-format", "stream-json",
-      "--input-format",  "stream-json",
-      "--verbose",
-      "--dangerously-skip-permissions",
-      "--append-system-prompt", SYSTEM_PROMPT,
+  constructor() {
+    this.token = loadToken();
+  }
+
+  reset(): void {
+    this.history = [];
+  }
+
+  async query(prompt: string): Promise<string> {
+    this.history.push({ role: "user", content: prompt });
+    if (this.history.length > MAX_HISTORY) {
+      this.history = this.history.slice(-MAX_HISTORY);
+    }
+
+    const messages: Message[] = [
+      { role: "system", content: SYSTEM_PROMPT },
+      ...this.history,
     ];
-    if (continueSession) args.push("--continue");
 
-    this.child = spawn("node", args, {
-      cwd:   WORK_DIR,
-      stdio: ["pipe", "pipe", "inherit"],
-      env:   { ...process.env },
-    });
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), QUERY_TIMEOUT_MS);
 
-    this.child.on("error", (err) => {
-      console.error(`[copilot] process error: ${err.message}`);
-    });
+    try {
+      const res = await fetch(`${COPILOT_API}/chat/completions`, {
+        method: "POST",
+        headers: {
+          Authorization:            `Bearer ${this.token}`,
+          "Content-Type":           "application/json",
+          "Copilot-Integration-Id": "vscode-chat",
+          "Editor-Version":         "vscode/1.95.0",
+        },
+        body: JSON.stringify({ model: MODEL, messages, stream: false }),
+        signal: ctrl.signal,
+      });
+      clearTimeout(timer);
 
-    this.rl = readline.createInterface({ input: this.child.stdout! });
-  }
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Copilot API ${res.status}: ${errText}`);
+      }
 
-  /** Send a prompt and collect the full text response. */
-  async query(prompt: string): Promise<AgentResponse> {
-    if (!this.child || !this.rl || this.child.killed) {
-      this.start();
+      const data = await res.json() as { choices: { message: { content: string } }[] };
+      const reply = data.choices?.[0]?.message?.content?.trim() ?? "(no response)";
+      this.history.push({ role: "assistant", content: reply });
+      return reply;
+
+    } catch (err: unknown) {
+      clearTimeout(timer);
+      if (err instanceof Error && err.name === "AbortError") return "Copilot timed out.";
+      throw err;
     }
-
-    return new Promise<AgentResponse>((resolve, reject) => {
-      const chunks: string[] = [];
-      let settled = false;
-
-      const timer = setTimeout(() => {
-        if (!settled) {
-          settled = true;
-          reject(new Error("Copilot agent timeout"));
-        }
-      }, QUERY_TIMEOUT_MS);
-
-      const onLine = (line: string) => {
-        try {
-          const msg = JSON.parse(line) as { type?: string; text?: string; result?: string };
-          if (msg.type === "text" && msg.text)   chunks.push(msg.text);
-          if (msg.type === "result")             finalize();
-        } catch { /* non-JSON debug lines */ }
-      };
-
-      const finalize = () => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        this.rl!.off("line", onLine);
-        resolve({ text: chunks.join("").trim() || "(no response)" });
-      };
-
-      this.rl!.on("line", onLine);
-
-      // Send prompt as stream-json message
-      const msg = JSON.stringify({ type: "user", message: { role: "user", content: prompt } });
-      this.child!.stdin!.write(msg + "\n");
-    });
-  }
-
-  /** Cleanly terminate the child process. */
-  stop(): void {
-    this.rl?.close();
-    this.rl = null;
-    if (this.child && !this.child.killed) {
-      this.child.kill("SIGTERM");
-    }
-    this.child = null;
   }
 }

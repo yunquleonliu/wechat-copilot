@@ -70,24 +70,35 @@ export async function getUpdates(creds, syncBuf) {
     }
 }
 export async function sendReply(creds, toUser, text, contextToken) {
+    const clientId = `wcp-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
     const payload = {
-        to_user: toUser,
-        context_token: contextToken,
-        msg_items: [{ item_type: 1, text_content: { content: text } }],
+        msg: {
+            from_user_id: "",
+            to_user_id: toUser,
+            client_id: clientId,
+            message_type: 2, // MSG_TYPE_BOT
+            message_state: 2, // MSG_STATE_FINISH
+            item_list: [{ type: 1, text_item: { text } }],
+            context_token: contextToken,
+        },
     };
     const body = JSON.stringify(payload);
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), API_TIMEOUT_MS);
     try {
-        await fetch(`${creds.baseUrl}/ilink/bot/sendmessage`, {
+        const res = await fetch(`${creds.baseUrl}/ilink/bot/sendmessage`, {
             method: "POST",
             headers: buildHeaders(creds.token, body),
             body,
             signal: ctrl.signal,
         });
-    }
-    finally {
         clearTimeout(timer);
+        if (!res.ok)
+            throw new Error(`sendMessage ${res.status}: ${await res.text()}`);
+    }
+    catch (err) {
+        clearTimeout(timer);
+        throw err;
     }
 }
 export async function getBotQRCode(baseUrl) {
