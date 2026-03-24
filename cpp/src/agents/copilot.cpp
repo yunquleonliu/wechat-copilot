@@ -13,6 +13,7 @@
 
 #include "wcp/agents/copilot.hpp"
 #include "wcp/http.hpp"
+#include "wcp/json_utils.hpp"
 #include "wcp/tools.hpp"
 
 #include <nlohmann/json.hpp>
@@ -26,6 +27,7 @@
 namespace wcp {
 
 using json = nlohmann::json;
+namespace ju  = json_util;
 
 static constexpr int MAX_TOOL_ROUNDS = 10;  // guard against infinite loops
 
@@ -96,12 +98,12 @@ std::string CopilotAgent::query(std::string prompt, const Config& cfg) {
     };
 
     // Parse tool definitions once
-    json tools_json = json::parse(tool_definitions_json());
+    json tools_json = ju::parse(tool_definitions_json());
 
     for (int round = 0; round < MAX_TOOL_ROUNDS; ++round) {
 
         // Build messages array from history
-        json messages = json::array();
+        json messages = ju::array();
         messages.push_back({{"role", "system"}, {"content", system_prompt()}});
 
         for (const auto& m : history_) {
@@ -143,7 +145,7 @@ std::string CopilotAgent::query(std::string prompt, const Config& cfg) {
                    ": " + res.value.body;
         }
 
-        auto j = json::parse(res.value.body, nullptr, false);
+        auto j = ju::parse(res.value.body);
         if (j.is_discarded()) return "Copilot: invalid JSON response";
 
         const auto& choice      = j.at("choices").at(0);

@@ -7,9 +7,11 @@
 
 #include "wcp/ilink.hpp"
 #include "wcp/http.hpp"
+#include "wcp/json_utils.hpp"
 
 #include <nlohmann/json.hpp>
 
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
@@ -21,7 +23,8 @@
 namespace wcp {
 
 using json = nlohmann::json;
-namespace fs = std::filesystem;
+namespace ju  = json_util;
+namespace fs  = std::filesystem;
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -33,11 +36,12 @@ std::string random_hex(size_t bytes) {
     std::uniform_int_distribution<uint8_t> dist(0, 255);
     std::string out;
     out.reserve(bytes * 2);
-    static constexpr char hex[] = "0123456789abcdef";
+    // TCC-SAFE: std::string_view::at() throws on out-of-range; indices 0..15 always valid.
+    static constexpr std::string_view hex = "0123456789abcdef";
     for (size_t i = 0; i < bytes; ++i) {
         uint8_t b = dist(gen);
-        out += hex[b >> 4];
-        out += hex[b & 0xf];
+        out += hex.at(b >> 4);
+        out += hex.at(b & 0x0fu);
     }
     return out;
 }
@@ -75,7 +79,9 @@ ILinkCreds load_creds(const Config& cfg) {
             ". Run: ./wcp-setup");
     }
     std::ifstream f(cfg.cred_path);
-    auto j = json::parse(f);
+    auto j = ju::parse(f);
+    if (j.is_discarded())
+        throw std::runtime_error("Invalid JSON in " + cfg.cred_path);
     ILinkCreds creds;
     creds.token    = j.at("token").get<std::string>();
     creds.base_url = j.value("baseUrl", "https://ilinkai.weixin.qq.com");
@@ -120,7 +126,7 @@ Result<GetUpdatesResponse> get_updates(
         return Result<GetUpdatesResponse>::failure(std::move(res.error));
     }
 
-    auto j = json::parse(res.value.body, nullptr, false);
+    auto j = ju::parse(res.value.body);
     if (j.is_discarded())
         return Result<GetUpdatesResponse>::failure("iLink: invalid JSON response");
 
@@ -128,12 +134,12 @@ Result<GetUpdatesResponse> get_updates(
     out.errcode  = j.value("errcode", 0);
     out.next_buf = j.value("get_updates_buf", std::string(sync_buf));
 
-    for (const auto& raw : j.value("msgs", json::array())) {
+    for (const auto& raw : j.value("msgs", ju::array())) {
         ILinkMessage msg;
         msg.message_type  = raw.value("message_type", 0);
         msg.from_user_id  = raw.value("from_user_id",  "");
         msg.context_token = raw.value("context_token", "");
-        for (const auto& item : raw.value("item_list", json::array()))
+        for (const auto& item : raw.value("item_list", ju::array()))
             msg.items.push_back(parse_item(item));
         out.msgs.push_back(std::move(msg));
     }
@@ -160,7 +166,7 @@ Result<void> send_reply(
         {"message_type",  2},
         {"message_state", 2},
         {"context_token", std::string(context_token)},
-        {"item_list", json::array({
+        {"item_list", ju::array({
             {{"type", 1}, {"text_item", {{"text", std::string(text)}}}}
         })},
     };
@@ -193,7 +199,7 @@ Result<QRCodeInfo> get_bot_qrcode(std::string_view base_url, const Config& cfg) 
 
     if (!res.ok) return Result<QRCodeInfo>::failure(std::move(res.error));
 
-    auto j = json::parse(res.value.body, nullptr, false);
+    auto j = ju::parse(res.value.body);
     if (j.is_discarded()) return Result<QRCodeInfo>::failure("Invalid JSON");
 
     QRCodeInfo info;
@@ -220,7 +226,7 @@ Result<QRLoginStatus> poll_qr_login(
 
     if (!res.ok) return Result<QRLoginStatus>::failure(std::move(res.error));
 
-    auto j = json::parse(res.value.body, nullptr, false);
+    auto j = ju::parse(res.value.body);
     if (j.is_discarded()) return Result<QRLoginStatus>::failure("Invalid JSON");
 
     QRLoginStatus s;

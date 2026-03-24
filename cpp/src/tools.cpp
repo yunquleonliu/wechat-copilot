@@ -6,6 +6,7 @@
 // TCC-CONC: popen/fread are thread-safe on Linux; no shared state.
 
 #include "wcp/tools.hpp"
+#include "wcp/json_utils.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -19,7 +20,8 @@
 namespace wcp {
 
 using json = nlohmann::json;
-namespace fs = std::filesystem;
+namespace ju  = json_util;
+namespace fs  = std::filesystem;
 
 // ── Safety constants ──────────────────────────────────────────────────────
 
@@ -29,7 +31,7 @@ static constexpr int    CMD_TIMEOUT  = 30;      // seconds
 // ── Tool definitions JSON ─────────────────────────────────────────────────
 
 std::string tool_definitions_json() {
-    json tools = json::array({
+    json tools = ju::array({
         {
             {"type", "function"},
             {"function", {
@@ -206,9 +208,9 @@ ToolResult dispatch_tool(
 {
     json args;
     try {
-        args = json::parse(args_json);
+        args = ju::parse(std::string(args_json));
     } catch (...) {
-        args = json::object();
+        args = ju::object();
     }
 
     if (tool_name == "read_file")   return tool_read_file(args, cfg);

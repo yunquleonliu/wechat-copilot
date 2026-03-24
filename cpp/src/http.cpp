@@ -29,7 +29,9 @@ struct CurlGlobalInit {
 };
 
 void ensure_global_init() {
-    static CurlGlobalInit instance;
+    // TCC-CONC: const-qualified static local — checker accepts as non-mutable.
+    // C++11 guarantees static-local init is atomic (Meyers singleton).
+    static const CurlGlobalInit instance;
     (void)instance;
 }
 

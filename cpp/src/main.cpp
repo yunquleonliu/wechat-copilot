@@ -8,17 +8,19 @@
 #include "wcp/adapter.hpp"
 #include "wcp/config.hpp"
 
+#include <atomic>
 #include <csignal>
 #include <cstdlib>
 #include <iostream>
 #include <stdexcept>
 
 namespace {
-// TCC-CONC: raw pointer to Adapter for signal handler only; not an owner.
-wcp::Adapter* g_adapter = nullptr;
+// TCC-CONC: std::atomic<T*> — safe to write from signal handler, read from main.
+std::atomic<wcp::Adapter*> g_adapter{nullptr};
 
 void signal_handler(int /*sig*/) {
-    if (g_adapter) g_adapter->stop();
+    auto* a = g_adapter.load();
+    if (a) a->stop();
 }
 } // anonymous namespace
 
@@ -30,7 +32,7 @@ int main() {
 
     wcp::Adapter adapter(cfg);  // TCC-OWN: stack-owned
 
-    g_adapter = &adapter;  // non-owning borrow for signal handler
+    g_adapter.store(&adapter);  // non-owning borrow for signal handler
     std::signal(SIGINT,  signal_handler);
     std::signal(SIGTERM, signal_handler);
 

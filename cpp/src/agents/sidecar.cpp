@@ -6,6 +6,7 @@
 
 #include "wcp/agents/sidecar.hpp"
 #include "wcp/http.hpp"
+#include "wcp/json_utils.hpp"
 
 #include <nlohmann/json.hpp>
 #include <chrono>
@@ -14,6 +15,7 @@
 namespace wcp {
 
 using json = nlohmann::json;
+namespace ju  = json_util;
 
 namespace {
 
@@ -27,7 +29,7 @@ std::string query_llm(
 {
     json body_json;
     body_json["model"]    = std::string(model);
-    body_json["messages"] = json::array({
+    body_json["messages"] = ju::array({
         {{"role", "user"}, {"content", std::move(prompt)}}
     });
     body_json["stream"] = false;
@@ -43,7 +45,7 @@ std::string query_llm(
     if (res.value.status_code != 200)
         return "Sidecar HTTP " + std::to_string(res.value.status_code);
 
-    auto j = json::parse(res.value.body, nullptr, false);
+    auto j = ju::parse(res.value.body);
     if (j.is_discarded()) return "(invalid JSON from sidecar)";
 
     try {
