@@ -148,13 +148,28 @@ std::string CopilotAgent::query(std::string prompt, const Config& cfg) {
         auto j = ju::parse(res.value.body);
         if (j.is_discarded()) return "Copilot: invalid JSON response";
 
-        const auto& choice      = j.at("choices").at(0);
+        if (!j.contains("choices") || !j["choices"].is_array() || j["choices"].empty())
+            return "Copilot: no choices in response";
+
+        const auto& choice      = j["choices"].at(0);
         std::string finish      = choice.value("finish_reason", "stop");
-        const auto& msg         = choice.at("message");
+        if (!choice.contains("message"))
+            return "Copilot: no message in choice";
+        const auto& msg         = choice["message"];
 
         // ── Tool call round ───────────────────────────────────────────────
         if (finish == "tool_calls") {
-            const auto& tool_calls = msg.at("tool_calls");
+            if (!msg.contains("tool_calls") || !msg["tool_calls"].is_array()
+                || msg["tool_calls"].empty()) {
+                // Defensive: finish_reason claims tool_calls but field is absent/empty.
+                // Treat as a stop and return whatever content the model gave us.
+                std::string reply;
+                try { reply = msg.at("content").get<std::string>(); } catch (...) {}
+                if (reply.empty()) reply = "(no response)";
+                history_.push_back({"assistant", reply, {}, {}});
+                return reply;
+            }
+            const auto& tool_calls = msg["tool_calls"];
 
             // Store the assistant's tool_calls message in history
             Message asst_msg;
