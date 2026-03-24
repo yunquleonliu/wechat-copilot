@@ -5,6 +5,7 @@
 
 #include <cstdlib>
 #include <sstream>
+#include <unistd.h>
 
 namespace wcp {
 
@@ -38,6 +39,15 @@ Config Config::from_env() {
         env_or("WECHAT_CRED_PATH", "~/.claude/channels/wechat/account.json"));
     c.sync_path = expand_home(
         env_or("WECHAT_SYNC_PATH", "~/.claude/channels/wechat/sync_buf.txt"));
+
+    // Work dir for tool execution: default to cwd if not set
+    const char* wd = std::getenv("WORK_DIR");
+    if (wd && *wd) {
+        c.work_dir = wd;
+    } else {
+        char cwd_buf[4096];
+        c.work_dir = (getcwd(cwd_buf, sizeof(cwd_buf))) ? cwd_buf : ".";
+    }
 
     // Allowed-from: comma-separated list
     const char* af = std::getenv("WECHAT_ALLOWED_FROM");

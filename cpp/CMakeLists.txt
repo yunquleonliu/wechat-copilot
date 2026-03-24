@@ -42,6 +42,7 @@ set(WCP_SOURCES
     src/config.cpp
     src/http.cpp
     src/ilink.cpp
+    src/tools.cpp
     src/router.cpp
     src/adapter.cpp
     src/agents/copilot.cpp
