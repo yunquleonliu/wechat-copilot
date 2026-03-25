@@ -42,10 +42,10 @@ std::string Router::route(std::string_view text_view, const Config& cfg) {
     if (text == "/help") {
         return
             "wechat-copilot commands:\n"
-            "  (message)     -> Copilot (claude-sonnet-4.6 via GitHub)\n"
+            "  (message)     -> VSCode agent (gpt-4o, full tools)\n"
+            "  /vsc  <msg>   -> VSCode agent (explicit)\n"
             "  /code <msg>   -> OmniCode 9B (local :8081)\n"
             "  /ask  <msg>   -> Gemma 9B (local :8080)\n"
-            "  /vsc  <msg>   -> VSCode agent (local :9191, full tools)\n"
             "  /status       -> system status\n"
             "  /reset        -> reset conversation history";
     }
@@ -73,8 +73,8 @@ std::string Router::route(std::string_view text_view, const Config& cfg) {
         return "[VSCode]\n" + query_vscode(prompt.substr(s), cfg);
     }
 
-    // ── default: GitHub Copilot ────────────────────────────────────────────
-    return copilot_->query(std::move(text), cfg);
+    // ── default: VSCode agent (replaces direct Copilot API) ───────────────
+    return "[VSCode]\n" + query_vscode(std::move(text), cfg);
 }
 
 } // namespace wcp

@@ -19,7 +19,7 @@ from urllib.error import URLError
 # ── Config ────────────────────────────────────────────────────────────────────
 PORT        = int(os.environ.get("VSC_AGENT_PORT", 9191))
 API_URL     = os.environ.get("COPILOT_API", "https://api.githubcopilot.com")
-MODEL       = os.environ.get("COPILOT_MODEL", "claude-sonnet-4.6")
+MODEL       = os.environ.get("COPILOT_MODEL", "gpt-4o")
 WORK_DIR    = os.environ.get("WORK_DIR", os.getcwd())
 MAX_ROUNDS  = 10
 TIMEOUT     = 180
