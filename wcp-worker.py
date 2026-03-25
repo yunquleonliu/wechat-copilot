@@ -35,12 +35,23 @@ POLL_SLEEP   = float(os.environ.get("POLL_SLEEP", "0.5"))
 MAX_HISTORY  = int(os.environ.get("MAX_HISTORY",  "20"))
 DB_PATH      = os.environ.get("WCP_DB",           os.path.join(QUEUE_DIR, "memory.db"))
 
+# Proactive notification channel (WhatsApp bridge)
+WA_BRIDGE    = os.environ.get("WA_BRIDGE_URL",  "http://127.0.0.1:9292")
+OWNER_PHONE  = os.environ.get("OWNER_PHONE",    "13432971568")
+
 INBOX_DIR    = os.path.join(QUEUE_DIR, "inbox")
 OUTBOX_DIR   = os.path.join(QUEUE_DIR, "outbox")
 
 SYSTEM_PROMPT = f"""You are a senior dev assistant connected to the RustCC-Profiler + WeChat-Copilot project on this machine.
-You reply via WeChat — be concise, use markdown sparingly (WeChat renders plain text).
+You reply via WeChat/WhatsApp — be concise, use markdown sparingly (plain text renders better on mobile).
 Reply in Chinese if the user writes Chinese, English otherwise.
+
+## Proactive notifications
+When you need a decision, approval, or want to alert the owner:
+- Use the `notify_owner` tool to send a WhatsApp message proactively
+- Use it for: build failures, test regressions, decisions needed before writing files,
+  task completions, errors requiring human input
+- Keep notifications short and actionable (under 200 chars ideal)
 
 ## Projects you know
 - **RustCC Profiler** at `{WORK_DIR}` — C++ static analyser enforcing 23 safety rules (TCC-OWN, TCC-LIFE, TCC-CONC, TCC-BORROW, TCC-ITER).
@@ -128,6 +139,13 @@ TOOLS = [
                                       "project": {"type": "string",
                                                   "enum": ["rustcc", "wcp", "abs"]}},
                        "required": ["path", "content"]}}},
+    {"type": "function", "function": {
+        "name": "notify_owner",
+        "description": "Send a proactive WhatsApp message to the project owner. Use when you need a decision, approval, or want to report something important without waiting for them to ask.",
+        "parameters": {"type": "object",
+                       "properties": {"message": {"type": "string",
+                                                  "description": "Short actionable message (under 300 chars)"}},
+                       "required": ["message"]}}},
 ]
 
 # ── Token ──────────────────────────────────────────────────────────────────────
@@ -241,6 +259,17 @@ def dispatch(name: str, args: dict) -> str:
             with open(p, "w") as f:
                 f.write(args["content"])
             return f"Written {len(args['content'])} bytes → {p}"
+
+        elif name == "notify_owner":
+            msg  = args.get("message", "")[:300]
+            body = json.dumps({"to": OWNER_PHONE, "text": f"[Agent] {msg}"}).encode()
+            req  = Request(f"{WA_BRIDGE}/send", data=body,
+                           headers={"Content-Type": "application/json"}, method="POST")
+            try:
+                resp = json.loads(urlopen(req, timeout=10).read())
+                return f"Notification sent: {resp}"
+            except Exception as e:
+                return f"notify_owner failed: {e}"
 
         return f"Unknown tool: {name}"
     except Exception as e:
