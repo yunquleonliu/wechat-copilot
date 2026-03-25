@@ -78,11 +78,11 @@ std::string query_gemma(std::string prompt, const Config& cfg) {
         cfg.api_timeout_ms * 8);
 }
 
-std::string query_vscode(std::string prompt, const Config& cfg) {
-    // vsc-agent.py uses POST /chat {"text":"..."} → {"reply":"..."}
-    // (not OpenAI-compat — direct JSON)
+std::string query_vscode(std::string prompt, const Config& cfg,
+                         std::string_view user_id) {
     json body_json;
-    body_json["text"] = std::move(prompt);
+    body_json["text"]    = std::move(prompt);
+    body_json["user_id"] = user_id.empty() ? "default" : std::string(user_id);
     std::string body  = body_json.dump();
 
     auto res = http_post(

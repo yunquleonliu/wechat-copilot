@@ -16,8 +16,8 @@ Router::Router(const Config& cfg)
     : copilot_(std::make_unique<CopilotAgent>(cfg))
 {}
 
-std::string Router::route(std::string_view text_view, const Config& cfg) {
-    // Trim leading/trailing whitespace
+std::string Router::route(std::string_view text_view, const Config& cfg,
+                          std::string_view user_id) {
     auto start = text_view.find_first_not_of(" \t\r\n");
     auto end   = text_view.find_last_not_of(" \t\r\n");
     if (start == std::string_view::npos) return "Empty message.";
@@ -70,11 +70,11 @@ std::string Router::route(std::string_view text_view, const Config& cfg) {
         auto prompt = text.substr(5);
         auto s = prompt.find_first_not_of(' ');
         if (s == std::string::npos) return "Usage: /vsc <question>";
-        return "[VSCode]\n" + query_vscode(prompt.substr(s), cfg);
+        return "[VSCode]\n" + query_vscode(prompt.substr(s), cfg, user_id);
     }
 
-    // ── default: VSCode agent (replaces direct Copilot API) ───────────────
-    return "[VSCode]\n" + query_vscode(std::move(text), cfg);
+    // ── default: VSCode agent ──────────────────────────────────────────────
+    return "[VSCode]\n" + query_vscode(std::move(text), cfg, user_id);
 }
 
 } // namespace wcp

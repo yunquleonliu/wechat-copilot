@@ -20,6 +20,7 @@ std::string query_gemma(std::string prompt, const Config& cfg);
 
 // POST to VSCode agent bridge on :9191 — for /vsc prefix
 // vsc-agent.py must be running: python3 vsc-agent.py
-std::string query_vscode(std::string prompt, const Config& cfg);
+std::string query_vscode(std::string prompt, const Config& cfg,
+                         std::string_view user_id = "");
 
 } // namespace wcp

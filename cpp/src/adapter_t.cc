@@ -71,7 +71,7 @@ void Adapter::handle_message(
 
     std::string reply;
     try {
-        reply = router_->route(text, cfg);
+        reply = router_->route(text, cfg, msg.from_user_id);
     } catch (const std::exception& e) {
         reply = std::string("Error: ") + e.what();
     }

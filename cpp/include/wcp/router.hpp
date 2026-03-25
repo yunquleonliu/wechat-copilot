@@ -21,7 +21,8 @@ public:
 
     // Dispatch a message to the appropriate agent.
     // Returns the reply string (never throws — errors become reply text).
-    std::string route(std::string_view text, const Config& cfg);
+    std::string route(std::string_view text, const Config& cfg,
+                      std::string_view user_id = "");
 
 private:
     // TCC-OWN: unique_ptr makes ownership explicit and non-nullable after ctor
