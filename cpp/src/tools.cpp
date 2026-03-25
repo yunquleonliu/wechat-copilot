@@ -66,6 +66,8 @@ std::string tool_definitions_json() {
                 {"name", "run_command"},
                 {"description",
                     "Run a shell command in WORK_DIR. "
+                    "Destructive commands (rm -rf, sudo, shutdown, mkfs, pipe-to-shell, etc.) "
+                    "are refused by a safety blacklist. "
                     "Use for: make, cmake, ctest, grep, find, cat, git, rg, etc. "
                     "30-second timeout. stdout+stderr captured."},
                 {"parameters", {
@@ -153,9 +155,60 @@ static ToolResult tool_list_dir(const json& args, const Config& cfg) {
     return {true, oss.str()};
 }
 
+// ── Command safety blacklist ──────────────────────────────────────────────
+//
+// Patterns matched against the raw command string (case-sensitive).
+// Any match → rejected before popen().
+// TCC-SAFE: all checks happen before any process is spawned.
+
+static bool is_blacklisted(const std::string& cmd) {
+    // Each entry is a substring pattern. The list covers:
+    //  - destructive file operations
+    //  - privilege escalation
+    //  - network pivoting / reverse shells
+    //  - cred/secret exposure
+    static constexpr std::string_view patterns[] = {
+        // Destructive deletions
+        "rm -rf",  "rm -fr",  "rm --no-preserve-root",
+        "rmdir",
+        // Overwrites of whole filesystems / devices
+        "mkfs",    "dd if=",  "shred",   "wipefs",
+        // Shutdown / reboot
+        "shutdown","reboot",  "halt",    "poweroff", "init 0", "init 6",
+        // Privilege escalation
+        "sudo ",   "su ",     "pkexec",  "doas ",
+        // Chmod/chown system paths
+        "chmod 777", "chown root",
+        // Writing crontabs / systemd units
+        "crontab", "/etc/cron", "/etc/systemd",
+        // Reverse shells / network pivoting
+        "nc -e",   "ncat -e", "bash -i", "sh -i",
+        "/dev/tcp", "/dev/udp",
+        // Secret / credential exposure
+        "cat /etc/shadow", "cat /etc/passwd",
+        "/root/.ssh",      "id_rsa",
+        // Kill all processes
+        "kill -9 -1", "killall -9",
+        // Fork bombs
+        ":(){",
+        // History wipe
+        "history -c", "rm ~/.bash_history",
+        // curl/wget pipe-to-shell
+        "| bash",  "| sh",  "|bash",  "|sh",
+    };
+    for (const auto& pat : patterns) {
+        if (cmd.find(pat) != std::string::npos) return true;
+    }
+    return false;
+}
+
+
 static ToolResult tool_run_command(const json& args, const Config& cfg) {
     std::string cmd = args.value("command", "");
     if (cmd.empty()) return {false, "run_command: missing 'command' argument"};
+
+    if (is_blacklisted(cmd))
+        return {false, "run_command: command refused — matches safety blacklist"};
 
     // Wrap: cd to work_dir, set timeout, capture stderr
     std::string full_cmd =
