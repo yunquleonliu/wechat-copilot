@@ -78,4 +78,32 @@ std::string query_gemma(std::string prompt, const Config& cfg) {
         cfg.api_timeout_ms * 8);
 }
 
+std::string query_vscode(std::string prompt, const Config& cfg) {
+    // vsc-agent.py uses POST /chat {"text":"..."} → {"reply":"..."}
+    // (not OpenAI-compat — direct JSON)
+    json body_json;
+    body_json["text"] = std::move(prompt);
+    std::string body  = body_json.dump();
+
+    auto res = http_post(
+        cfg.vscode_url + "/chat",
+        {"Content-Type: application/json"},
+        body,
+        cfg.query_timeout_ms);
+
+    if (!res.ok) return "VSCode agent error: " + res.error;
+    if (res.value.status_code != 200)
+        return "VSCode agent HTTP " + std::to_string(res.value.status_code);
+
+    auto j = ju::parse(res.value.body);
+    if (j.is_discarded()) return "(invalid JSON from vsc-agent)";
+
+    try {
+        return j.at("reply").get<std::string>();
+    } catch (...) {
+        // Fallback: surface raw body for debugging
+        return res.value.body.substr(0, 512);
+    }
+}
+
 } // namespace wcp

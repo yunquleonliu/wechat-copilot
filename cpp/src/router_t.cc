@@ -45,6 +45,7 @@ std::string Router::route(std::string_view text_view, const Config& cfg) {
             "  (message)     -> Copilot (claude-sonnet-4.6 via GitHub)\n"
             "  /code <msg>   -> OmniCode 9B (local :8081)\n"
             "  /ask  <msg>   -> Gemma 9B (local :8080)\n"
+            "  /vsc  <msg>   -> VSCode agent (local :9191, full tools)\n"
             "  /status       -> system status\n"
             "  /reset        -> reset conversation history";
     }
@@ -63,6 +64,13 @@ std::string Router::route(std::string_view text_view, const Config& cfg) {
         auto s = prompt.find_first_not_of(' ');
         if (s == std::string::npos) return "Usage: /ask <question>";
         return "[Gemma]\n" + query_gemma(prompt.substr(s), cfg);
+    }
+
+    if (text.size() > 5 && text.substr(0, 5) == "/vsc ") {
+        auto prompt = text.substr(5);
+        auto s = prompt.find_first_not_of(' ');
+        if (s == std::string::npos) return "Usage: /vsc <question>";
+        return "[VSCode]\n" + query_vscode(prompt.substr(s), cfg);
     }
 
     // ── default: GitHub Copilot ────────────────────────────────────────────

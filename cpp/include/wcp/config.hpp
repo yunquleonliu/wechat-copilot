@@ -26,6 +26,9 @@ struct Config {
     std::string gemma_url      = "http://localhost:8080/v1";
     std::string gemma_model    = "gemma2-9b";
 
+    // VSCode agent bridge (vsc-agent.py)
+    std::string vscode_url     = "http://127.0.0.1:9191";
+
     // iLink credential file paths
     std::string cred_path;    // ~/.claude/channels/wechat/account.json
     std::string sync_path;    // ~/.claude/channels/wechat/sync_buf.txt

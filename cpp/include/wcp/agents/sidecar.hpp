@@ -18,4 +18,8 @@ std::string query_omnicode(std::string prompt, const Config& cfg);
 // POST to Gemma 9B on :8080 — for /ask prefix
 std::string query_gemma(std::string prompt, const Config& cfg);
 
+// POST to VSCode agent bridge on :9191 — for /vsc prefix
+// vsc-agent.py must be running: python3 vsc-agent.py
+std::string query_vscode(std::string prompt, const Config& cfg);
+
 } // namespace wcp

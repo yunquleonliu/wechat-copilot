@@ -26,21 +26,26 @@ WCP 将微信私聊消息桥接至 GitHub Copilot（通过 `api.githubcopilot.co
 ```
 WeChat ─── iLink long-poll ──► Adapter
                                   │
-                               Router
-                                  │
-                           CopilotAgent (ReAct loop)
-                           ┌──────┴────────────────────┐
-                     Copilot API              Local Tools
-                  (api.githubcopilot.com)   ┌───────────────┐
-                                            │ read_file     │
-                                            │ list_dir      │
-                                            │ run_command * │
-                                            │ write_file    │
-                                            └───────────────┘
-                                                    │
-                                           Sidecar LLM (optional)
-                                        OmniCode 9B / Gemma 9B
-                                        (localhost llama.cpp)
+                               Router  (prefix dispatch)
+              ┌───────────────────┼──────────────┬──────────────┐
+           default             /code           /ask           /vsc
+              │                  │               │               │
+       CopilotAgent        OmniCode 9B      Gemma 9B     VSCode Agent
+       (ReAct loop)        :8081/v1         :8080/v1     :9191/chat
+       GitHub API          llama.cpp        llama.cpp    vsc-agent.py
+       + 4 local tools     (offline)        (offline)    Copilot API
+                                                         + 4 tools
+```
+
+**VSCode Agent Hook** (`/vsc` prefix):  
+Routes the message to `vsc-agent.py` (port 9191) — a Python HTTP server that
+runs the full Copilot agentic loop with the WCP working directory in context.
+Effectively connects WeChat to the same intelligence layer as this VSCode session.
+
+Start vsc-agent (runs independently):
+```bash
+screen -dmS vsc-agent bash -c \
+  "cd /datapai/RustCC-Claw/wechat-copilot && python3 vsc-agent.py"
 ```
 
 `* run_command` is guarded by a safety blacklist (see below).
@@ -125,8 +130,23 @@ WECHAT_ALLOWED_FROM=<user_id> # Comma-separated allowed WeChat user IDs
 ### Run / 运行
 
 ```bash
+# Start vsc-agent (VSCode hook, required for /vsc prefix)
+screen -dmS vsc-agent bash -c \
+  "cd /datapai/RustCC-Claw/wechat-copilot && python3 vsc-agent.py"
+
+# Start wcp-bridge
 screen -dmS wcp-bridge bash -c 'set -a && . .env && set +a && cd cpp/build && ./wcp-bridge'
 ```
+
+WeChat message prefixes:
+| Prefix | Agent |
+|--------|-------|
+| (none) | GitHub Copilot API (ReAct loop) |
+| `/code <msg>` | OmniCode 9B on :8081 |
+| `/ask  <msg>` | Gemma 9B on :8080 |
+| `/vsc  <msg>` | VSCode agent bridge on :9191 |
+| `/status` | System status |
+| `/reset` | Clear conversation history |
 
 ---
 

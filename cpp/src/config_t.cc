@@ -34,6 +34,7 @@ Config Config::from_env() {
     c.omnicode_model = env_or("OMNICODE_MODEL", "omnicode-9b");
     c.gemma_url      = env_or("GEMMA_URL",      "http://localhost:8080/v1");
     c.gemma_model    = env_or("GEMMA_MODEL",    "gemma2-9b");
+    c.vscode_url     = env_or("VSCODE_AGENT_URL", "http://127.0.0.1:9191");
 
     c.cred_path = expand_home(
         env_or("WECHAT_CRED_PATH", "~/.claude/channels/wechat/account.json"));
