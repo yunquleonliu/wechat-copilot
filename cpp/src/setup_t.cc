@@ -46,7 +46,11 @@ int main() {
             token = *st.value.token;
             break;
         }
-        std::cout << "  status=" << st.value.status << '\r' << std::flush;
+        if (st.value.status == 1) {
+            std::cout << "  📱 Scanned! Confirm in WeChat...\r" << std::flush;
+        } else {
+            std::cout << "  Waiting for scan...\r" << std::flush;
+        }
     }
 
     if (token.empty()) {

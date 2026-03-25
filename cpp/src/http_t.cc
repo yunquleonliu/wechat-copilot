@@ -77,4 +77,35 @@ Result<HttpResponse> http_post(
     return Result<HttpResponse>::success({status, std::move(response_body)});
 }
 
+Result<HttpResponse> http_get(
+    std::string_view                url,
+    const std::vector<std::string>& headers,
+    std::chrono::milliseconds       timeout)
+{
+    ensure_global_init();
+    CurlHandle curl;
+    CURL* c = curl.get();
+
+    std::string response_body;
+    CurlSlist hlist;
+    for (const auto& h : headers) hlist.append(h.c_str());
+
+    curl_easy_setopt(c, CURLOPT_URL,            std::string(url).c_str());
+    curl_easy_setopt(c, CURLOPT_HTTPGET,        1L);
+    curl_easy_setopt(c, CURLOPT_HTTPHEADER,     hlist.get());
+    curl_easy_setopt(c, CURLOPT_WRITEFUNCTION,  write_cb);
+    curl_easy_setopt(c, CURLOPT_WRITEDATA,      &response_body);
+    curl_easy_setopt(c, CURLOPT_TIMEOUT_MS,     static_cast<long>(timeout.count()));
+    curl_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L);
+
+    CURLcode rc = curl_easy_perform(c);
+    if (rc != CURLE_OK)
+        return Result<HttpResponse>::failure(
+            std::string("curl error: ") + curl_easy_strerror(rc));
+
+    long status = 0;
+    curl_easy_getinfo(c, CURLINFO_RESPONSE_CODE, &status);
+    return Result<HttpResponse>::success({status, std::move(response_body)});
+}
+
 } // namespace wcp

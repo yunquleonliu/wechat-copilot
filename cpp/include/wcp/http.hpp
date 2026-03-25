@@ -99,4 +99,10 @@ Result<HttpResponse> http_post(
     std::string_view                         body,
     std::chrono::milliseconds                timeout);
 
+// Performs a single synchronous GET.
+Result<HttpResponse> http_get(
+    std::string_view                         url,
+    const std::vector<std::string>&          headers,
+    std::chrono::milliseconds                timeout);
+
 } // namespace wcp

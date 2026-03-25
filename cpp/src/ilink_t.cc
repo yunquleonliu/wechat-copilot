@@ -190,11 +190,11 @@ Result<void> send_reply(
 // ── QR login helpers ───────────────────────────────────────────────────────
 
 Result<QRCodeInfo> get_bot_qrcode(std::string_view base_url, const Config& cfg) {
-    std::string body = R"({"bot_type":3})";
+    // bot_type is a query parameter; X-WECHAT-UIN required
     auto res = http_post(
-        std::string(base_url) + "/ilink/bot/get_bot_qrcode",
-        {"Content-Type: application/json"},
-        body,
+        std::string(base_url) + "/ilink/bot/get_bot_qrcode?bot_type=3",
+        {"Content-Type: application/json", "X-WECHAT-UIN: d2NwLWJvdA=="},
+        "{}",
         cfg.api_timeout_ms);
 
     if (!res.ok) return Result<QRCodeInfo>::failure(std::move(res.error));
@@ -203,8 +203,8 @@ Result<QRCodeInfo> get_bot_qrcode(std::string_view base_url, const Config& cfg) 
     if (j.is_discarded()) return Result<QRCodeInfo>::failure("Invalid JSON");
 
     QRCodeInfo info;
-    info.qr_url = j.value("qr_url", "");
-    info.ticket = j.value("ticket", "");
+    info.qr_url = j.value("qrcode_img_content", j.value("qr_url", ""));
+    info.ticket = j.value("qrcode", j.value("ticket", ""));
     info.token  = j.value("token",  "");
     return Result<QRCodeInfo>::success(std::move(info));
 }
@@ -214,25 +214,39 @@ Result<QRLoginStatus> poll_qr_login(
     std::string_view ticket,
     const Config&    cfg)
 {
-    json payload;
-    payload["ticket"] = std::string(ticket);
-    std::string body = payload.dump();
+    // API change: GET with qrcode as query param; X-WECHAT-UIN required
+    std::string url = std::string(base_url) + "/ilink/bot/get_qrcode_status"
+                    + "?qrcode=" + std::string(ticket);
 
-    auto res = http_post(
-        std::string(base_url) + "/ilink/bot/query_qrcode_status",
-        {"Content-Type: application/json"},
-        body,
-        cfg.api_timeout_ms);
+    auto res = http_get(
+        url,
+        {"iLink-App-ClientVersion: 1", "X-WECHAT-UIN: d2NwLWJvdA=="},
+        std::chrono::milliseconds{2'000});  // short poll — catch "confirmed" quickly
 
-    if (!res.ok) return Result<QRLoginStatus>::failure(std::move(res.error));
+    // Curl timeout on long-poll means server is still waiting for scan
+    if (!res.ok) {
+        if (res.error.find("Timeout") != std::string::npos ||
+            res.error.find("timeout") != std::string::npos)
+            return Result<QRLoginStatus>::success({0, std::nullopt});
+        return Result<QRLoginStatus>::failure(std::move(res.error));
+    }
 
     auto j = ju::parse(res.value.body);
     if (j.is_discarded()) return Result<QRLoginStatus>::failure("Invalid JSON");
 
     QRLoginStatus s;
-    s.status = j.value("status", 0);
-    if (j.contains("token") && !j["token"].is_null())
-        s.token = j["token"].get<std::string>();
+    // New API: status is a string ("wait","scaned","confirmed","expired")
+    // "confirmed" means login complete; bot_token holds the new token
+    std::string status_str = j.value("status", "wait");
+    if (status_str == "confirmed") {
+        s.status = 2;
+        std::string bot_token = j.value("bot_token", j.value("token", ""));
+        if (!bot_token.empty()) s.token = bot_token;
+    } else if (status_str == "scaned") {
+        s.status = 1;  // scanned but not confirmed yet
+    } else {
+        s.status = 0;  // wait or expired
+    }
     return Result<QRLoginStatus>::success(std::move(s));
 }
 
